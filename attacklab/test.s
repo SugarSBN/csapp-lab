@@ -1,4 +1,2 @@
-popq %rdi
-pushq $0x401900
-pushq $0x4017ec
-mov $0x59b997fa, %edi
+movq $0x5561dc78, %rdi
+pushq $0x4018fa

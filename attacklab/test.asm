@@ -5,7 +5,5 @@ test.o:     file format elf64-x86-64
 Disassembly of section .text:
 
 0000000000000000 <.text>:
-   0:	5f                   	pop    %rdi
-   1:	68 00 19 40 00       	push   $0x401900
-   6:	68 ec 17 40 00       	push   $0x4017ec
-   b:	bf fa 97 b9 59       	mov    $0x59b997fa,%edi
+   0:	48 c7 c7 78 dc 61 55 	mov    $0x5561dc78,%rdi
+   7:	68 fa 18 40 00       	push   $0x4018fa
