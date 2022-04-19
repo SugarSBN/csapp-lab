@@ -1,2 +1,5 @@
-movq $0x5561dc78, %rdi
-pushq $0x4018fa
+push %rax
+push %rbx
+push %rcx
+mov 
+add %rax, %rdi
