@@ -98,6 +98,7 @@ team_t team = {
 
 void *heap_listp;
 void *treap;
+void *lst;
 
 static int check_tree(void *bp, void *bp1){
     if (bp == bp1)  return 1;
@@ -260,8 +261,12 @@ static void *extend_heap(size_t words){
     PUT(FTRP(bp), PACK(size, 0));
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1));
     /* | 0 | header | Block | Block | Block | Block | footer | (0, 1) | */
-    insert_node(bp);
+    if (GET_SIZE(HDRP(bp)) > 2 * DSIZE)   insert_node(bp);
+    PUT(HDRP(bp), PACK(size, 0));
+    PUT(FTRP(bp), PACK(size, 0));
+    PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1));
     bp = coalesce(bp);
+    lst = NEXT_BLKP(bp);
     return bp;
 }
 
@@ -340,11 +345,13 @@ void *mm_malloc(size_t size)
         //print_heap();
         return bp;
     }
-    
-    extendsize = MAX(asize, CHUNKSIZE);
+    size_t lstsize = GET_ALLOC(HDRP(PREV_BLKP(lst))) ? 0 : GET_SIZE(HDRP(PREV_BLKP(lst)));
+    extendsize = MAX(asize, CHUNKSIZE) - lstsize;
     if ((bp = extend_heap(extendsize / WSIZE)) == NULL)
         return NULL;
     bp = coalesce(bp);
+    //print_block(bp);
+    //printf("%p \n", asize);
     //printf("malloc find = %p\n", bp);
     bp = place(bp, asize);
     //printf("After malloc");
