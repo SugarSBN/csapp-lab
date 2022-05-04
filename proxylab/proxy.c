@@ -1,8 +1,8 @@
 /*
  * @Author: SuBonan
  * @Date: 2022-05-01 17:57:12
- * @LastEditTime: 2022-05-03 09:24:45
- * @FilePath: \proxylab\proxy.c
+ * @LastEditTime: 2022-05-04 14:08:08
+ * @FilePath: \csapp-lab\proxylab\proxy.c
  * @Github: https://github.com/SugarSBN
  * これなに、これなに、これない、これなに、これなに、これなに、ねこ！ヾ(*´∀｀*)ﾉ
  */
@@ -23,14 +23,15 @@ int parse_uri(char *uri, char *hostname, char *port, char *filepath);
 void read_build_requesthdrs(rio_t *rp, char *headers); 
 void clienterror(int fd, char *cause, char *errnum, 
 		 char *shortmsg, char *longmsg); 
+void *thread(void *vargp);
 
 int main(int argc, char **argv) 
 {
-    int listenfd, connfd;
+    int listenfd, *connfdp;
     char hostname[MAXLINE], port[MAXLINE];
     socklen_t clientlen;
     struct sockaddr_storage clientaddr;
-
+    pthread_t tid;
     /* Check command line args */
     if (argc != 2) {
 	    fprintf(stderr, "usage: %s <port>\n", argv[0]);
@@ -40,13 +41,20 @@ int main(int argc, char **argv)
     listenfd = Open_listenfd(argv[1]);
     while (1) {
 	    clientlen = sizeof(clientaddr);
-	    connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen); //line:netp:tiny:accept
-        Getnameinfo((SA *) &clientaddr, clientlen, hostname, MAXLINE, 
-                    port, MAXLINE, 0);
-        printf("Proxy accepted connection from (%s, %s)\n", hostname, port);
-	    doit(connfd);                                             //line:netp:tiny:doit
-	    Close(connfd);                                            //line:netp:tiny:close
+        connfdp = Malloc(sizeof(int));
+	    *connfdp = Accept(listenfd, (SA *)&clientaddr, &clientlen); //line:netp:tiny:accept
+        Pthread_create(&tid, NULL, thread, connfdp);                                 //line:netp:tiny:close
     }
+}
+
+/* CSAPP 3 Edition Figure 12.14 */
+void *thread(void *vargp){
+    int connfd = *((int *)vargp);
+    Pthread_detach(pthread_self());
+    Free(vargp);
+    doit(connfd);
+    Close(connfd);
+    return NULL;
 }
 
 void doit(int clientfd) 
