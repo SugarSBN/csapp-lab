@@ -1,7 +1,7 @@
 /*
  * @Author: SuBonan
  * @Date: 2022-05-01 17:57:12
- * @LastEditTime: 2022-05-04 14:08:08
+ * @LastEditTime: 2022-05-04 15:37:19
  * @FilePath: \csapp-lab\proxylab\proxy.c
  * @Github: https://github.com/SugarSBN
  * これなに、これなに、これない、これなに、これなに、これなに、ねこ！ヾ(*´∀｀*)ﾉ
@@ -25,6 +25,59 @@ void clienterror(int fd, char *cause, char *errnum,
 		 char *shortmsg, char *longmsg); 
 void *thread(void *vargp);
 
+#define CACHESIZE (MAX_CACHE_SIZE / sizeof(struct cachenode))
+
+struct cachenode {
+    sem_t mutex;
+    char buf[MAX_OBJECT_SIZE];
+    char uri[MAXLINE];
+    int timestamp;
+} cache[CACHESIZE];
+
+int timestamp = 0;
+void cache_init(){
+    for (int i = 0;i < CACHESIZE;i++) {
+        Sem_init(&cache[i].mutex, 0, 1);
+        cache[i].timestamp = 0;
+    }
+}
+
+char *cache_query(char *nuri){
+    timestamp++;
+    char *res = NULL;
+    for (int i = 0;i < CACHESIZE;i++){
+        P(&cache[i].mutex);
+        if (!strcmp(nuri, cache[i].uri))    {
+            res = cache[i].buf;
+            cache[i].timestamp = timestamp;
+        }
+        V(&cache[i].mutex);
+    }
+    return res;
+}
+
+void cache_elim(char *nuri, char *nbuf){
+
+    int res = -1;
+    int min_timestamp = 0xffff;
+    timestamp++;
+    for (int i = 0;i < CACHESIZE;i++){
+        P(&cache[i].mutex);
+        if (res == -1 || cache[i].timestamp < min_timestamp){
+            res = i;
+            min_timestamp = cache[i].timestamp;
+        }
+        V(&cache[i].mutex);
+    }
+    P(&cache[res].mutex);
+    cache[res].timestamp = timestamp;
+    int len = strlen(nuri);
+    strncpy(cache[res].uri, nuri, len);
+    len = strlen(nbuf);
+    strncpy(cache[res].buf, nbuf, len);
+    V(&cache[res].mutex);   
+}
+
 int main(int argc, char **argv) 
 {
     int listenfd, *connfdp;
@@ -37,7 +90,7 @@ int main(int argc, char **argv)
 	    fprintf(stderr, "usage: %s <port>\n", argv[0]);
 	    exit(1);
     }
-
+    cache_init();
     listenfd = Open_listenfd(argv[1]);
     while (1) {
 	    clientlen = sizeof(clientaddr);
@@ -82,16 +135,27 @@ void doit(int clientfd)
     
     /* Parse URI from GET request */
     parse_uri(uri, hostname, port, filepath);       //line:netp:doit:staticcheck
-    printf("%s\n%s\n", hostname, port);
-    int serverfd = Open_clientfd(hostname, port);
-    char to_server[MAXLINE], to_client[MAXLINE];
-    
-    sprintf(to_server, "GET %s HTTP/1.0\r\n%s", filepath, headers);
-    Rio_writen(serverfd, to_server, strlen(to_server));
-    Rio_readinitb(&rio, serverfd);    
-    int n;
-    while ((n = Rio_readlineb(&rio, to_client, MAXLINE)))
-        Rio_writen(clientfd, to_client, n);
+    char *ca = cache_query(uri);
+    if (ca) {
+        int len = strlen(ca);
+        Rio_writen(clientfd, ca, len);
+    } else {
+        int serverfd = Open_clientfd(hostname, port);
+        char to_server[MAXLINE], to_client[MAXLINE];
+        char from_server[MAX_OBJECT_SIZE];
+
+        sprintf(to_server, "GET %s HTTP/1.0\r\n%s", filepath, headers);
+        Rio_writen(serverfd, to_server, strlen(to_server));
+        Rio_readinitb(&rio, serverfd);    
+        int n;
+        int tot_siz = 0;
+        while ((n = Rio_readlineb(&rio, to_client, MAXLINE))){
+            Rio_writen(clientfd, to_client, n);
+            strncat(from_server, to_client, n);
+            tot_siz += n;
+        }
+        if (tot_siz <= MAX_OBJECT_SIZE) cache_elim(uri, from_server);
+    }
 }
 
 void read_build_requesthdrs(rio_t *rp, char *headers) 
